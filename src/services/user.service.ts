@@ -8,13 +8,20 @@ import { Repository } from 'typeorm';
 
 import { CreateUserDto, UpdateUserDto } from '@dtos/user.dto';
 import { User } from '@entities/user.entity';
+import { CustomersService } from './customer.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService {
-  constructor(@InjectRepository(User) private userRepo: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private userRepo: Repository<User>,
+    private customerService: CustomersService,
+  ) {}
 
   async findAll() {
-    return this.userRepo.find();
+    return this.userRepo.find({
+      relations: ['customer'],
+    });
   }
 
   async findOne(id: number) {
@@ -27,6 +34,12 @@ export class UserService {
 
   async create(payload: CreateUserDto) {
     const newUser = this.userRepo.create(payload);
+    const hashPassword = await bcrypt.hash(newUser.password, 10);
+    newUser.password = hashPassword;
+    if (payload.customerId) {
+      const customer = await this.customerService.findOne(payload.customerId);
+      newUser.customer = customer;
+    }
     return await this.userRepo.save(newUser).catch((error) => {
       throw new ConflictException(error.detail);
     });
@@ -49,5 +62,9 @@ export class UserService {
       throw new NotFoundException(`User #${id} not found`);
     }
     return this.userRepo.delete({ id });
+  }
+
+  findByEmail(email: string) {
+    return this.userRepo.findOne({ where: { email } });
   }
 }
